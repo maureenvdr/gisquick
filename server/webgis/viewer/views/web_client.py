@@ -15,9 +15,23 @@ from webgis.viewer import forms
 from webgis.viewer.views.reverse import map_url
 from webgis.viewer.views.project_utils import get_project, \
     get_user_data, InvalidProjectException
+from django.views.generic.base import RedirectView
 
 
 from django.views.decorators.csrf import ensure_csrf_cookie
+
+
+class MapRedirectView(RedirectView):
+    permanent = False
+    query_string = True
+    pattern_name = 'project_name'
+
+    def get_redirect_url(self, *args, **kwargs):
+        return "/?PROJECT={prefix}{project}".format(
+            prefix=getattr(settings, 'GISQUICK_DEFAULT_PROJECT_NAMESPACE', ''),
+            project=kwargs["project_name"])
+
+
 
 @csrf_exempt
 @ensure_csrf_cookie
@@ -32,10 +46,7 @@ def client_login(request):
         if form.is_valid():
             username = form.cleaned_data['username']
             password = form.cleaned_data['password']
-            if username == "guest":
-                user = models.GisquickUser.get_guest_user()
-            else:
-                user = authenticate(username=username, password=password)
+            user = authenticate(username=username, password=password)
             if user:
                 try:
                     login(request, user)
@@ -50,18 +61,14 @@ def client_logout(request):
     logout(request)
     return HttpResponse(" ", status=200)
 
+
 def map(request):
     data = {}
     try:
-        if not request.user.is_authenticated():
-            user = models.GisquickUser.get_guest_user()
-            if user:
-                login(request, user)
-            else:
-                raise RuntimeError("Anonymous user is not configured")
         data['user'] = get_user_data(request.user)
         data['project'] = get_project(request)
         data['app'] = {
+            'lang': settings.LANGUAGE_CODE,
             'version': webgis.VERSION,
             'reset_password_url': getattr(settings, 'RESET_PASSWORD_URL', '')
         }
@@ -86,3 +93,15 @@ def map(request):
         status=200,
         content_type="text/html"
     )
+
+def dev_map(request):
+    data = {
+        'app': {
+            'lang': settings.LANGUAGE_CODE,
+            'version': webgis.VERSION,
+            'reset_password_url': getattr(settings, 'RESET_PASSWORD_URL', '')
+        },
+        'project': get_project(request),
+        'user': get_user_data(request.user)
+    }
+    return JsonResponse(data)

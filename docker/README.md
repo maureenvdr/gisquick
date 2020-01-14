@@ -13,7 +13,7 @@ Application is split into 3 services running in docker containers:
 
 Build:
 ```
-$ docker build -f docker/django/Dockerfile -t gisquick/django:1.0 --build-arg version=1.0 .
+$ docker build -f docker/django/Dockerfile -t gisquick/django:vue --build-arg version=dev .
 ```
 
 #### Nginx Server
@@ -83,36 +83,34 @@ Reload NGINX server
 $ docker kill -s HUP `docker ps -qf "ancestor=gisquick/nginx"`
 ```
 
+## Localhost deployment
 
-
-## Create regular users
-
-Start Django admin-shell
-
-a) use running django container
+Prepare environment
 ```
-$ docker exec -it `docker ps -qf "ancestor=gisquick/django"` django-admin shell
-```
-b) or start in a new container
-```
-$ docker run -it --rm -v "/var/www/data/:/var/www/gisquick/data/" gisquick/django django-admin shell
-```
+$ cp example.docker-compose.yml docker-compose.yml
 
-Then you can create users programmatically
-```python
-from django.contrib.auth import get_user_model
-get_user_model().objects.create_user('user', email='user@gisquick.org', password='user', first_name='User')
+$ mkdir -p _data/data _data/media _data/publish _data/etc/letsencrypt/live/localhost
+
+$ openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+    -keyout _data/etc/letsencrypt/live/localhost/privkey.pem \
+    -out _data/etc/letsencrypt/live/localhost/fullchain.pem \
+    -subj "/C=CZ/ST=State/L=City/O=Gisquick/OU=IT Department/CN=localhost"
 ```
 
-
-## Web client development
-
-Setup folders for published projects, data and media files and create user with username 'user1' and password 'user1'.
-Then start docker containers:
-
+Start all services (Gisquick will be running on https://localhost)
 ```
-$ docker build -t gisquick/js-dev:alpine -f docker/client/alpine/Dockerfile .
-$ docker-compose -f docker/docker-compose-dev-client.yml up
+$ docker-compose up -d
 ```
 
-Open http://localhost:8100
+Create database (django service must be running)
+```
+$ docker-compose exec django django-admin makemigrations viewer
+$ docker-compose exec django django-admin migrate
+```
+
+Create superuser account
+```
+$ docker-compose exec django django-admin createsuperuser
+```
+
+Create regular users from admin interface running on https://localhost/admin
